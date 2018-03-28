@@ -97,14 +97,6 @@
        (propertize state 'face '(:background "#35ACCE" :foreground "black")
                    'display '(raise 0.15))))))
 
-(defun omnibox-M-x--get-candidates (input)
-  "."
-  (let* ((regexp (-> (replace-regexp-in-string " " ".*?" input)
-                     (concat ".*?")))
-         (completion-regexp-list (and regexp (list regexp)))
-         (case-fold-search completion-ignore-case))
-    (all-completions "" obarray 'commandp)))
-
 (defun omnibox--render-buffer (candidates)
   (setq omnibox-selection 0)
   (with-current-buffer (omnibox--buffer)
@@ -152,16 +144,31 @@
   (-let* (((prompt candidates detail) (omnibox--resolve-params plist)))
     (omnibox--set prompt prompt)
     (omnibox--set candidates candidates)
+    (omnibox--set detail detail)
     (-> (omnibox--fetch-candidates "")
         (omnibox--render-buffer)
         (omnibox--make-frame))
     (omnibox-mode 1)))
 
+(defun omnibox-M-x--doc (candidate)
+  (-some--> (intern candidate)
+            (and (functionp it) it)
+            (documentation it)
+            (car (split-string it "\n"))))
+
+(defun omnibox-M-x--get-candidates (input)
+  "."
+  (let* ((regexp (-> (replace-regexp-in-string " " ".*?" input)
+                     (concat ".*?")))
+         (completion-regexp-list (and regexp (list regexp)))
+         (case-fold-search completion-ignore-case))
+    (all-completions "" obarray 'commandp)))
+
 (defun omnibox-M-x nil
   (interactive)
   (omnibox :prompt "M-x: "
            :candidates 'omnibox-M-x--get-candidates
-           :detail nil))
+           :detail 'omnibox-M-x--doc))
 
 ;; (omnibox :detail "moi" :candidates '("seb" "ok" "coucou") :prompt "seb: ")
 
@@ -194,14 +201,16 @@
          '((side . top) (window-height . 1))))
       frame)))
 
+(defun omnibox--candidate-at-point nil
+  (buffer-substring (line-beginning-position)
+                    (line-end-position)))
+
 (defun omnibox--update-overlay nil
   "."
   (let ((documentation (or (get-text-property (point) 'omnibox-doc)
-                           (-some--> (intern (buffer-substring (line-beginning-position)
-                                                               (line-end-position)))
+                           (-some--> (omnibox--get detail)
                                      (and (functionp it) it)
-                                     (documentation it)
-                                     (car (split-string it "\n")))
+                                     (funcall it (omnibox--candidate-at-point)))
                            "")))
     (setq documentation (concat " " documentation))
     (move-overlay (omnibox--overlay) (line-beginning-position) (line-end-position))
