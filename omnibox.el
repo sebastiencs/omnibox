@@ -59,6 +59,7 @@
 
 (defvar-local omnibox-ov nil)
 (defvar-local omnibox-selection 0)
+(defvar-local omnibox-candidates-length 0)
 
 (defun omnibox--filter-command (item)
   (and (commandp item)
@@ -76,6 +77,17 @@
 (defun omnibox--buffer (&optional frame)
   (get-buffer-create (omnibox--make-buffer-name frame)))
 
+(defun omnibox--modeline nil
+  (let* ((selection (number-to-string (1+ omnibox-selection)))
+         (length (number-to-string omnibox-candidates-length))
+         (state (concat " " selection "/" length " ")))
+    (concat
+     (propertize " Omnibox-M-x " 'face '(:background "#35ACCE" :foreground "black")
+                 'display '(raise 0.15))
+     (propertize " " 'display `(space :align-to (- right-fringe ,(length state)) :height 1.5))
+     (propertize state 'face '(:background "#35ACCE" :foreground "black")
+                 'display '(raise 0.15)))))
+
 (defun omnibox--get-candidates (&optional regexp)
   "."
   (let* ((completion-regexp-list (and regexp (list regexp)))
@@ -84,15 +96,17 @@
 
 (defun omnibox--render-buffer (candidates)
   (setq omnibox-selection 0)
+  (setq omnibox-candidates-length (length candidates))
   (with-current-buffer (omnibox--buffer)
     (erase-buffer)
     (dolist (candidate candidates)
       (let ((string (if (symbolp candidate) (symbol-name candidate) candidate)))
         (insert string "\n")))
-    (omnibox--update-line 0)
-    (setq mode-line-format nil
+    (setq mode-line-format '(:eval (omnibox--modeline))
           truncate-lines t
+          omnibox-candidates-length (length candidates)
           header-line-format (propertize " " 'display '(space :align-to right-fringe) 'face '(:height 0.3)))
+    (omnibox--update-line 0)
     (current-buffer)))
 
 (defun omnibox--update-list-buffer nil
@@ -134,12 +148,19 @@
   "Omnibox.
 
 \(fn &key PROMPT CANDIDATES DETAIL)."
-  (-let* (((prompt candidates detail)
-           (omnibox--resolve-params plist)))
-    (message "PROMPT: %s CANDIDATES: %s DETAIL: %s" prompt candidates detail)
+  (-let* (((prompt candidates detail) (omnibox--resolve-params plist))
+          (candidates (if (functionp candidates) (funcall candidates "") candidates))
+          (buffer (omnibox--render-buffer candidates))
+          (frame (omnibox--make-frame buffer)))
+    (omnibox-mode 1)
+    (with-selected-frame frame
+      (display-buffer-in-side-window
+       (omnibox--update-read-buffer)
+       '((side . top) (window-height . 1)))
+      )
     ))
 
-(omnibox :detail "moi" :candidates "coucou" :prompt "seb")
+(omnibox :detail "moi" :candidates '("seb" "ok" "coucou") :prompt "seb")
 
 (defun omnibox--make-frame (buffer)
   (-if-let* ((frame (frame-local-getq omnibox-frame)))
@@ -178,29 +199,35 @@
   (let ((documentation (or (get-text-property (point) 'omnibox-doc)
                            (-some--> (intern (buffer-substring (line-beginning-position)
                                                                (line-end-position)))
+                                     (and (functionp it) it)
                                      (documentation it)
                                      (car (split-string it "\n")))
                            "")))
-    (move-overlay (omnibox-doc-overlay)
-                  (line-end-position)
-                  (line-end-position))
+    (move-overlay (omnibox-doc-overlay) (line-end-position) (line-end-position))
     (overlay-put (omnibox-doc-overlay)
                  'after-string
                  (propertize (concat " "
                                      (propertize " " 'display `(space :align-to (- right-fringe ,(string-width documentation)) :height 1.1))
                                      documentation)
-                             'face '(:background "#35ACCE" :foreground "black")))))
+                             'face '(:background "#607D8B" :foreground "black")))))
+
+(defun omnibox--disable-overlays nil
+  (overlay-put (omnibox-doc-overlay) 'after-string nil)
+  (overlay-put (omnibox--overlay) 'face nil))
 
 (defun omnibox--update-line (selection)
+  (setq omnibox-selection selection)
   (goto-char 1)
   (forward-line selection)
-  (omnibox--update-documentation)
-  (move-overlay (omnibox--overlay)
-                (line-beginning-position)
-                (line-beginning-position 2))
-  (overlay-put (omnibox--overlay)
-               'face '(:background "#35ACCE" :foreground "black"))
-  )
+  (if (= omnibox-candidates-length 0)
+      (omnibox--disable-overlays)
+    (omnibox--update-documentation)
+    (move-overlay (omnibox--overlay)
+                  (line-beginning-position)
+                  (line-beginning-position 2))
+    (overlay-put (omnibox--overlay)
+                 'face '(:background "#607D8B" :foreground "black"))
+    ))
 
 (defun omnibox--select nil
   (interactive))
@@ -211,7 +238,7 @@
 
 (defun omnibox--next nil
   (interactive)
-  (setq omnibox-selection (1+ omnibox-selection))
+  (setq omnibox-selection (min (1+ omnibox-selection) (1- omnibox-candidates-length)))
   (omnibox--change-line omnibox-selection))
 
 (defun omnibox--prev nil
