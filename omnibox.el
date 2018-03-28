@@ -61,6 +61,14 @@
 (defvar-local omnibox-selection 0)
 (defvar-local omnibox-candidates-length 0)
 
+(defmacro omnibox--get (variable)
+  (let ((var (intern (format "omnibox-%s" variable))))
+    `(frame-local-get ',var (frame-parent))))
+
+(defmacro omnibox--set (variable value)
+  (let ((var (intern (format "omnibox-%s" variable))))
+    `(frame-local-set ',var ,value (frame-parent))))
+
 (defun omnibox--filter-command (item)
   (and (commandp item)
        (not (get item 'byte-obsolete-info))
@@ -89,55 +97,49 @@
        (propertize state 'face '(:background "#35ACCE" :foreground "black")
                    'display '(raise 0.15))))))
 
-(defun omnibox--get-candidates (&optional regexp)
+(defun omnibox-M-x--get-candidates (input)
   "."
-  (let* ((completion-regexp-list (and regexp (list regexp)))
+  (let* ((regexp (-> (replace-regexp-in-string " " ".*?" input)
+                     (concat ".*?")))
+         (completion-regexp-list (and regexp (list regexp)))
          (case-fold-search completion-ignore-case))
     (all-completions "" obarray 'commandp)))
 
 (defun omnibox--render-buffer (candidates)
   (setq omnibox-selection 0)
-  (setq omnibox-candidates-length (length candidates))
   (with-current-buffer (omnibox--buffer)
     (erase-buffer)
     (dolist (candidate candidates)
-      (let ((string (if (symbolp candidate) (symbol-name candidate) candidate)))
-        (insert string "\n")))
+      (insert candidate "\n"))
     (setq mode-line-format '(:eval (omnibox--modeline))
           truncate-lines t
-          omnibox-candidates-length (length candidates)
+          omnibox-candidates-length (omnibox--get candidates-length)
           header-line-format (propertize " " 'display '(space :align-to right-fringe) 'face '(:height 0.3)))
     (omnibox--update-line 0)
     (current-buffer)))
 
 (defun omnibox--update-list-buffer nil
-  (-when-let* ((string (frame-local-getq omnibox-read))
-               (regexp (replace-regexp-in-string " " ".*?" string))
-               (regexp (concat regexp ".*?")))
-    (omnibox--render-buffer (omnibox--get-candidates regexp))))
+  (-> (omnibox--get input)
+      (omnibox--fetch-candidates)
+      (omnibox--render-buffer)))
 
 (defun omnibox--update-read-buffer (&optional string)
   (with-current-buffer (get-buffer-create "*SIDE_TEST*")
     (setq mode-line-format nil
           header-line-format nil)
     (erase-buffer)
-    (insert (concat (propertize "M-x: " 'face 'minibuffer-prompt)
-                    string
-                    (propertize " " 'face 'cursor)))
+    (insert (propertize (omnibox--get prompt) 'face 'minibuffer-prompt)
+            (or string "")
+            (propertize " " 'face 'cursor))
     (current-buffer)))
 
-(defun omnibox-M-x nil
-  (interactive)
-  (let* ((candidates (omnibox--get-candidates))
-         (buffer (omnibox--render-buffer candidates))
-         (frame (omnibox--make-frame buffer)))
-    (omnibox-mode 1)
-    (with-selected-frame frame
-      (display-buffer-in-side-window
-       (omnibox--update-read-buffer)
-       '((side . top) (window-height . 1)))
-      )
-    ))
+(defun omnibox--fetch-candidates (input)
+  (let* ((candidates (omnibox--get candidates))
+         (candidates (if (functionp candidates)
+                         (funcall candidates input)
+                       candidates)))
+    (omnibox--set candidates-length (length candidates))
+    candidates))
 
 (defun omnibox--resolve-params (params)
   (list
@@ -146,26 +148,28 @@
    (plist-get params :detail)))
 
 (defun omnibox (&rest plist)
-  "Omnibox.
+  "Omnibox."
+  (-let* (((prompt candidates detail) (omnibox--resolve-params plist)))
+    (omnibox--set prompt prompt)
+    (omnibox--set candidates candidates)
+    (-> (omnibox--fetch-candidates "")
+        (omnibox--render-buffer)
+        (omnibox--make-frame))
+    (omnibox-mode 1)))
 
-\(fn &key PROMPT CANDIDATES DETAIL)."
-  (-let* (((prompt candidates detail) (omnibox--resolve-params plist))
-          (candidates (if (functionp candidates) (funcall candidates "") candidates))
-          (buffer (omnibox--render-buffer candidates))
-          (frame (omnibox--make-frame buffer)))
-    (omnibox-mode 1)
-    (with-selected-frame frame
-      (display-buffer-in-side-window
-       (omnibox--update-read-buffer)
-       '((side . top) (window-height . 1)))
-      )
-    ))
+(defun omnibox-M-x nil
+  (interactive)
+  (omnibox :prompt "M-x: "
+           :candidates 'omnibox-M-x--get-candidates
+           :detail nil))
 
-;; (omnibox :detail "moi" :candidates '("seb" "ok" "coucou") :prompt "seb")
+;; (omnibox :detail "moi" :candidates '("seb" "ok" "coucou") :prompt "seb: ")
 
 (defun omnibox--make-frame (buffer)
-  (-if-let* ((frame (frame-local-getq omnibox-frame)))
-      (make-frame-visible frame)
+  (-if-let* ((frame (omnibox--get frame)))
+      (progn
+        (omnibox--update-read-buffer)
+        (make-frame-visible frame))
     (let* ((before-make-frame-hook nil)
            (after-make-frame-functions nil)
            (internal-border (round (* (frame-char-width) 1.2)))
@@ -183,9 +187,12 @@
            (window (frame-selected-window frame)))
       (redirect-frame-focus frame (selected-frame))
       (set-window-dedicated-p window t)
-      (frame-local-setq omnibox-frame frame)
-      frame
-      )))
+      (omnibox--set frame frame)
+      (with-selected-frame frame
+        (display-buffer-in-side-window
+         (omnibox--update-read-buffer)
+         '((side . top) (window-height . 1))))
+      frame)))
 
 (defun omnibox--update-overlay nil
   "."
@@ -215,7 +222,7 @@
   (setq omnibox-selection selection)
   (goto-char 1)
   (forward-line selection)
-  (if (= omnibox-candidates-length 0)
+  (if (= (omnibox--get candidates-length) 0)
       (omnibox--disable-overlays)
     (omnibox--update-overlay)))
 
@@ -228,7 +235,8 @@
 
 (defun omnibox--next nil
   (interactive)
-  (setq omnibox-selection (min (1+ omnibox-selection) (1- omnibox-candidates-length)))
+  (setq omnibox-selection (min (1+ omnibox-selection)
+                               (1- (omnibox--get candidates-length))))
   (omnibox--change-line omnibox-selection))
 
 (defun omnibox--prev nil
@@ -237,31 +245,31 @@
   (omnibox--change-line omnibox-selection))
 
 (defun omnibox--hide nil
-  (-some-> (frame-local-getq omnibox-frame)
+  (-some-> (omnibox--get frame)
            (make-frame-invisible)))
 
 (defun omnibox--abort nil
   (interactive)
   (omnibox-mode -1)
   (omnibox--hide)
-  (frame-local-setq omnibox-read nil))
+  (omnibox--set input nil))
 
 (defun omnibox--insert nil
   (interactive)
   (let* ((char (char-to-string last-command-event))
-         (current (or (frame-local-getq omnibox-read) ""))
+         (current (or (omnibox--get input) ""))
          (new-string (concat current char)))
-    (frame-local-setq omnibox-read new-string)
+    (omnibox--set input new-string)
     (omnibox--update-read-buffer new-string)
     (omnibox--update-list-buffer)
     ))
 
 (defun omnibox--backward-delete nil
   (interactive)
-  (-when-let* ((current (frame-local-getq omnibox-read))
+  (-when-let* ((current (omnibox--get input))
                (len (length current))
                (new-string (substring current 0 (max (1- len) 0))))
-    (frame-local-setq omnibox-read new-string)
+    (omnibox--set input new-string)
     (omnibox--update-read-buffer new-string)
     (omnibox--update-list-buffer)
     ))
