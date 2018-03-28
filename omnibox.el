@@ -60,6 +60,7 @@
 (defvar-local omnibox-ov nil)
 (defvar-local omnibox-selection 0)
 (defvar-local omnibox-candidates-length 0)
+(defvar-local omnibox--extern nil)
 
 (defmacro omnibox--get (variable)
   (let ((var (intern (format "omnibox-%s" variable))))
@@ -90,7 +91,7 @@
          (length (number-to-string omnibox-candidates-length))
          (state (concat " " selection "/" length " ")))
     (concat
-     (propertize " Omnibox-M-x " 'face '(:background "#35ACCE" :foreground "black")
+     (propertize (or (omnibox--get title) " Omnibox ") 'face '(:background "#35ACCE" :foreground "black")
                  'display '(raise 0.15))
      (propertize " " 'display `(space :align-to (- right-fringe ,(length state)) :height 1.5))
      (when (> omnibox-candidates-length 0)
@@ -125,7 +126,7 @@
     (current-buffer)))
 
 (defun omnibox--sort (candidates input)
-  (-let* ((groups (--group-by (s-starts-with-p input it) candidates)))
+  (-let* ((groups (--group-by (string-prefix-p input it) candidates)))
     (-concat
      (--sort (< (length it) (length other)) (alist-get t groups))
      (--sort (< (length it) (length other)) (alist-get nil groups)))))
@@ -139,11 +140,17 @@
         (add-face-text-property start end '(:foreground "#35ACCE") nil candidate))))
   candidate)
 
+(defun omnibox--get-candidates (candidates input)
+  (cond
+   ((and (functionp candidates) (omnibox--get extern))
+    (funcall candidates input (omnibox--get predicate) t))
+   ((functionp candidates)
+    (funcall candidates input))
+   (t candidates)))
+
 (defun omnibox--fetch-candidates (input)
   (let* ((candidates (omnibox--get candidates))
-         (candidates (if (functionp candidates)
-                         (funcall candidates input)
-                       candidates))
+         (candidates (omnibox--get-candidates candidates input))
          (candidates (-take 500 candidates))
          (len (length candidates)))
     (omnibox--set candidates-length len)
@@ -161,6 +168,7 @@
 (defun omnibox (&rest plist)
   "Omnibox."
   (-let* (((prompt candidates detail) (omnibox--resolve-params plist)))
+    (omnibox--set extern omnibox--extern)
     (omnibox--set prompt prompt)
     (omnibox--set candidates candidates)
     (omnibox--set detail detail)
@@ -186,22 +194,10 @@
 
 (defun omnibox-M-x nil
   (interactive)
+  (omnibox--set title (format " %s " this-command))
   (omnibox :prompt "M-x: "
            :candidates 'omnibox-M-x--get-candidates
            :detail 'omnibox-M-x--doc))
-
-(defun omnibox-desc-func--get-candidates (input)
-  "."
-  (let* ((regexp (-> (replace-regexp-in-string " " ".*?" input)
-                     (concat ".*?")))
-         (completion-regexp-list (and regexp (list regexp)))
-         (case-fold-search completion-ignore-case))
-    (all-completions "" obarray 'functionp)))
-
-(defun omnibox-desc-func nil
-  (interactive)
-  (omnibox :prompt "Describe function: "
-           :candidates 'omnibox-desc-func--get-candidates))
 
 ;; (omnibox :detail "moi" :candidates '("seb" "ok" "coucou") :prompt "seb: ")
 
@@ -209,7 +205,8 @@
   (-if-let* ((frame (omnibox--get frame)))
       (progn
         (omnibox--update-input-buffer)
-        (make-frame-visible frame))
+        (make-frame-visible frame)
+        (redisplay))
     (let* ((before-make-frame-hook nil)
            (after-make-frame-functions nil)
            (internal-border (round (* (frame-char-width) 1.2)))
@@ -269,7 +266,10 @@
     (omnibox--update-overlay)))
 
 (defun omnibox--select nil
-  (interactive))
+  (interactive)
+  (with-current-buffer (omnibox--buffer)
+    (omnibox--set selected (omnibox--candidate-at-point)))
+  (omnibox--abort))
 
 (defun omnibox--change-line (selection)
   (with-selected-window (get-buffer-window (omnibox--buffer) t)
@@ -292,6 +292,8 @@
 
 (defun omnibox--abort nil
   (interactive)
+  (when (minibufferp)
+    (exit-minibuffer))
   (omnibox-mode -1)
   (omnibox--hide)
   (omnibox--set input nil))
@@ -317,10 +319,10 @@
 
 (defun omnibox--try-complete nil
   (interactive)
-  (-when-let* ((input (omnibox--get input))
-               (try (try-completion input (omnibox--fetch-candidates input))))
-    (-> (substring-no-properties try)
-        (omnibox--update-input))))
+  (-some--> (omnibox--get input)
+            (try-completion it (omnibox--fetch-candidates it))
+            (substring-no-properties it)
+            (omnibox--update-input it)))
 
 (defvar omnibox-mode-map nil
   "Keymap for ‘omnibox-mode’.")
@@ -343,6 +345,22 @@
 (define-minor-mode omnibox-mode
   "Mode for omnibox."
   :init-value nil)
+
+(defun omnibox--completing-read (prompt collection &optional
+                                        predicate require-match
+                                        initial-input hist def
+                                        inherit-input-method)
+  (let ((omnibox--extern t))
+    (omnibox--set predicate predicate)
+    (omnibox--set title (format " Omnibox-%s " this-command))
+    (omnibox :prompt prompt
+             :candidates collection)
+    (unwind-protect
+        (read-from-minibuffer "" nil omnibox-mode-map)
+      (omnibox--abort)
+      (when (eq this-command 'omnibox--abort)
+        (keyboard-quit)))
+    (omnibox--get selected)))
 
 (global-set-key (kbd "C-o") 'omnibox-M-x)
 
