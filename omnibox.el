@@ -126,10 +126,10 @@
     (current-buffer)))
 
 (defun omnibox--sort (candidates input)
-  (-let* (((others starting) (--group-by (s-starts-with-p input it) candidates)))
+  (-let* ((groups (--group-by (s-starts-with-p input it) candidates)))
     (-concat
-     (--sort (< (length it) (length other)) (cdr starting))
-     (--sort (< (length it) (length other)) (cdr others)))))
+     (--sort (< (length it) (length other)) (alist-get t groups))
+     (--sort (< (length it) (length other)) (alist-get nil groups)))))
 
 (defun omnibox--highlight-common (candidate input)
   (setq candidate (copy-sequence candidate))
@@ -176,6 +176,7 @@
             (documentation it)
             (car (split-string it "\n"))))
 
+;;"\\(myword.*oklm.*\\)\\|\\(oklm.*myword\\)" ?
 (defun omnibox-M-x--get-candidates (input)
   "."
   (let* ((regexp (-> (replace-regexp-in-string " " ".*?" input)
