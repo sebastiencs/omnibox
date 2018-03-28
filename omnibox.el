@@ -170,6 +170,19 @@
            :candidates 'omnibox-M-x--get-candidates
            :detail 'omnibox-M-x--doc))
 
+(defun omnibox-desc-func--get-candidates (input)
+  "."
+  (let* ((regexp (-> (replace-regexp-in-string " " ".*?" input)
+                     (concat ".*?")))
+         (completion-regexp-list (and regexp (list regexp)))
+         (case-fold-search completion-ignore-case))
+    (all-completions "" obarray 'functionp)))
+
+(defun omnibox-desc-func nil
+  (interactive)
+  (omnibox :prompt "Describe function: "
+           :candidates 'omnibox-desc-func--get-candidates))
+
 ;; (omnibox :detail "moi" :candidates '("seb" "ok" "coucou") :prompt "seb: ")
 
 (defun omnibox--make-frame (buffer)
@@ -263,25 +276,30 @@
   (omnibox--hide)
   (omnibox--set input nil))
 
+(defun omnibox--update-input (new-input)
+  (omnibox--set input new-input)
+  (omnibox--update-read-buffer new-input)
+  (omnibox--update-list-buffer))
+
 (defun omnibox--insert nil
   (interactive)
   (let* ((char (char-to-string last-command-event))
          (current (or (omnibox--get input) ""))
          (new-string (concat current char)))
-    (omnibox--set input new-string)
-    (omnibox--update-read-buffer new-string)
-    (omnibox--update-list-buffer)
-    ))
+    (omnibox--update-input new-string)))
 
 (defun omnibox--backward-delete nil
   (interactive)
   (-when-let* ((current (omnibox--get input))
                (len (length current))
                (new-string (substring current 0 (max (1- len) 0))))
-    (omnibox--set input new-string)
-    (omnibox--update-read-buffer new-string)
-    (omnibox--update-list-buffer)
-    ))
+    (omnibox--update-input new-string)))
+
+(defun omnibox--try-complete nil
+  (interactive)
+  (-when-let* ((input (omnibox--get input))
+               (try (try-completion input (omnibox--fetch-candidates input))))
+    (omnibox--update-input try)))
 
 (defvar omnibox-mode-map nil
   "Keymap for ‘omnibox-mode’.")
@@ -295,6 +313,8 @@
     (define-key map (kbd "C-p") 'omnibox--prev)
     (define-key map (kbd "<up>") 'omnibox--prev)
     (define-key map (kbd "RET") 'omnibox--select)
+    (define-key map (kbd "TAB") 'omnibox--try-complete)
+    (define-key map (kbd "<tab>") 'omnibox--try-complete)
     (define-key map (kbd "DEL") 'omnibox--backward-delete)
     (define-key map [remap self-insert-command] 'omnibox--insert)
     (setq omnibox-mode-map map)))
