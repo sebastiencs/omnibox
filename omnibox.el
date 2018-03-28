@@ -101,8 +101,7 @@
   (setq omnibox-selection 0)
   (with-current-buffer (omnibox--buffer)
     (erase-buffer)
-    (dolist (candidate candidates)
-      (insert candidate "\n"))
+    (insert (mapconcat 'identity candidates "\n"))
     (setq mode-line-format '(:eval (omnibox--modeline))
           truncate-lines t
           omnibox-candidates-length (omnibox--get candidates-length)
@@ -115,7 +114,7 @@
       (omnibox--fetch-candidates)
       (omnibox--render-buffer)))
 
-(defun omnibox--update-read-buffer (&optional string)
+(defun omnibox--update-input-buffer (&optional string)
   (with-current-buffer (get-buffer-create "*SIDE_TEST*")
     (setq mode-line-format nil
           header-line-format nil)
@@ -209,7 +208,7 @@
 (defun omnibox--make-frame (buffer)
   (-if-let* ((frame (omnibox--get frame)))
       (progn
-        (omnibox--update-read-buffer)
+        (omnibox--update-input-buffer)
         (make-frame-visible frame))
     (let* ((before-make-frame-hook nil)
            (after-make-frame-functions nil)
@@ -231,7 +230,7 @@
       (omnibox--set frame frame)
       (with-selected-frame frame
         (display-buffer-in-side-window
-         (omnibox--update-read-buffer)
+         (omnibox--update-input-buffer)
          '((side . top) (window-height . 1))))
       frame)))
 
@@ -299,7 +298,7 @@
 
 (defun omnibox--update-input (new-input)
   (omnibox--set input new-input)
-  (omnibox--update-read-buffer new-input)
+  (omnibox--update-input-buffer new-input)
   (omnibox--update-list-buffer))
 
 (defun omnibox--insert nil
