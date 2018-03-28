@@ -125,13 +125,33 @@
             (propertize " " 'face 'cursor))
     (current-buffer)))
 
+(defun omnibox--sort (candidates input)
+  (-let* (((others starting) (--group-by (s-starts-with-p input it) candidates)))
+    (-concat
+     (--sort (< (length it) (length other)) (cdr starting))
+     (--sort (< (length it) (length other)) (cdr others)))))
+
+(defun omnibox--highlight-common (candidate input)
+  (setq candidate (copy-sequence candidate))
+  (dolist (word (split-string input " " t))
+    (-let* ((match-data (string-match word candidate))
+            ((start end) (match-data t)))
+      (when (> end start)
+        (add-face-text-property start end '(:foreground "#35ACCE") nil candidate))))
+  candidate)
+
 (defun omnibox--fetch-candidates (input)
   (let* ((candidates (omnibox--get candidates))
          (candidates (if (functionp candidates)
                          (funcall candidates input)
-                       candidates)))
-    (omnibox--set candidates-length (length candidates))
-    candidates))
+                       candidates))
+         (candidates (-take 500 candidates))
+         (len (length candidates)))
+    (omnibox--set candidates-length len)
+    (if (> (length input) 0)
+        (-> (--map (omnibox--highlight-common it input) candidates)
+            (omnibox--sort input))
+      candidates)))
 
 (defun omnibox--resolve-params (params)
   (list
@@ -299,7 +319,8 @@
   (interactive)
   (-when-let* ((input (omnibox--get input))
                (try (try-completion input (omnibox--fetch-candidates input))))
-    (omnibox--update-input try)))
+    (-> (substring-no-properties try)
+        (omnibox--update-input))))
 
 (defvar omnibox-mode-map nil
   "Keymap for ‘omnibox-mode’.")
