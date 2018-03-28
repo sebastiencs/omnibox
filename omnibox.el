@@ -85,8 +85,9 @@
      (propertize " Omnibox-M-x " 'face '(:background "#35ACCE" :foreground "black")
                  'display '(raise 0.15))
      (propertize " " 'display `(space :align-to (- right-fringe ,(length state)) :height 1.5))
-     (propertize state 'face '(:background "#35ACCE" :foreground "black")
-                 'display '(raise 0.15)))))
+     (when (> omnibox-candidates-length 0)
+       (propertize state 'face '(:background "#35ACCE" :foreground "black")
+                   'display '(raise 0.15))))))
 
 (defun omnibox--get-candidates (&optional regexp)
   "."
