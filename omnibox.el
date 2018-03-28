@@ -160,7 +160,7 @@
       )
     ))
 
-(omnibox :detail "moi" :candidates '("seb" "ok" "coucou") :prompt "seb")
+;; (omnibox :detail "moi" :candidates '("seb" "ok" "coucou") :prompt "seb")
 
 (defun omnibox--make-frame (buffer)
   (-if-let* ((frame (frame-local-getq omnibox-frame)))
@@ -186,15 +186,7 @@
       frame
       )))
 
-;; (omnibox-get-candidates)
-
-(defvar-local omnibox-doc-ov nil)
-
-(defun omnibox-doc-overlay nil
-  (or omnibox-doc-ov
-      (setq omnibox-doc-ov (make-overlay 1 1))))
-
-(defun omnibox--update-documentation nil
+(defun omnibox--update-overlay nil
   "."
   (let ((documentation (or (get-text-property (point) 'omnibox-doc)
                            (-some--> (intern (buffer-substring (line-beginning-position)
@@ -203,16 +195,19 @@
                                      (documentation it)
                                      (car (split-string it "\n")))
                            "")))
-    (move-overlay (omnibox-doc-overlay) (line-end-position) (line-end-position))
-    (overlay-put (omnibox-doc-overlay)
+    (setq documentation (concat " " documentation))
+    (move-overlay (omnibox--overlay) (line-beginning-position) (line-end-position))
+    (overlay-put (omnibox--overlay)
+                 'face '(:background "#607D8B" :foreground "black"))
+    (overlay-put (omnibox--overlay)
                  'after-string
-                 (propertize (concat " "
-                                     (propertize " " 'display `(space :align-to (- right-fringe ,(string-width documentation)) :height 1.1))
-                                     documentation)
-                             'face '(:background "#607D8B" :foreground "black")))))
+                 (concat (propertize " " 'display `(space :align-to (- right-fringe ,(string-width documentation)) :height 1.1)
+                                     'face '(:background "#607D8B" :foreground "black"))
+                         (propertize documentation 'face '(:background "#607D8B" :foreground "black"))
+                         (propertize " " 'display `(space :align-to right-fringe))))))
 
 (defun omnibox--disable-overlays nil
-  (overlay-put (omnibox-doc-overlay) 'after-string nil)
+  (overlay-put (omnibox--overlay) 'after-string nil)
   (overlay-put (omnibox--overlay) 'face nil))
 
 (defun omnibox--update-line (selection)
@@ -221,13 +216,7 @@
   (forward-line selection)
   (if (= omnibox-candidates-length 0)
       (omnibox--disable-overlays)
-    (omnibox--update-documentation)
-    (move-overlay (omnibox--overlay)
-                  (line-beginning-position)
-                  (line-beginning-position 2))
-    (overlay-put (omnibox--overlay)
-                 'face '(:background "#607D8B" :foreground "black"))
-    ))
+    (omnibox--update-overlay)))
 
 (defun omnibox--select nil
   (interactive))
