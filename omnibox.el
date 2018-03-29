@@ -184,19 +184,31 @@
             (car (split-string it "\n"))))
 
 ;;"\\(myword.*oklm.*\\)\\|\\(oklm.*myword\\)" ?
-(defun omnibox-M-x--get-candidates (input)
-  "."
-  (let* ((regexp (-> (replace-regexp-in-string " " ".*?" input)
-                     (concat ".*?")))
+(defun omnibox--obarray-candidates (input predicate)
+  (let* ((regexp (->> (string-trim input)
+                      (replace-regexp-in-string " \\|$" ".*?")))
          (completion-regexp-list (and regexp (list regexp)))
          (case-fold-search completion-ignore-case))
-    (all-completions "" obarray 'commandp)))
+    (all-completions "" obarray predicate)))
+
+(defun omnibox--title (&optional command)
+  (--> (or command this-command "?")
+       (if (symbolp it) (symbol-name it) it)
+       (replace-regexp-in-string "^omnibox-" "" it)
+       (format " Omnibox-%s " it)))
 
 (defun omnibox-M-x nil
   (interactive)
-  (omnibox--set title (format " %s " this-command))
+  (omnibox--set title (omnibox--title))
   (omnibox :prompt "M-x: "
-           :candidates 'omnibox-M-x--get-candidates
+           :candidates (lambda (input) (omnibox--obarray-candidates input 'commandp))
+           :detail 'omnibox-M-x--doc))
+
+(defun omnibox-describe-function nil
+  (interactive)
+  (omnibox--set title (omnibox--title))
+  (omnibox :prompt "M-x: "
+           :candidates (lambda (input) (omnibox--obarray-candidates input 'functionp))
            :detail 'omnibox-M-x--doc))
 
 ;; (omnibox :detail "moi" :candidates '("seb" "ok" "coucou") :prompt "seb: ")
