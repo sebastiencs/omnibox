@@ -324,11 +324,19 @@
             (substring-no-properties it)
             (omnibox--update-input it)))
 
+(defun omnibox--make-char-table nil
+  "."
+  (let ((my-char-table (make-char-table 'my-char-table)))
+    (map-char-table (lambda (key val)
+                      (when (eq 'self-insert-command val)
+                        (set-char-table-range my-char-table key 'omnibox--insert)))
+                    (car (cdr global-map)))
+    my-char-table))
+
 (defvar omnibox-mode-map nil
   "Keymap for ‘omnibox-mode’.")
 (unless omnibox-mode-map
   (let ((map (make-sparse-keymap)))
-    (suppress-keymap map t)
     (define-key map "\e\e\e" 'omnibox--abort)
     (define-key map "\C-g" 'omnibox--abort)
     (define-key map (kbd "C-n") 'omnibox--next)
@@ -336,10 +344,13 @@
     (define-key map (kbd "C-p") 'omnibox--prev)
     (define-key map (kbd "<up>") 'omnibox--prev)
     (define-key map (kbd "RET") 'omnibox--select)
+    (define-key map (kbd "<return>") 'omnibox--select)
     (define-key map (kbd "TAB") 'omnibox--try-complete)
     (define-key map (kbd "<tab>") 'omnibox--try-complete)
     (define-key map (kbd "DEL") 'omnibox--backward-delete)
-    (define-key map [remap self-insert-command] 'omnibox--insert)
+    (define-key map (kbd "<backspace>") 'omnibox--backward-delete)
+    (define-key map [t] 'ignore)
+    (setq map (-snoc map (omnibox--make-char-table)))
     (setq omnibox-mode-map map)))
 
 (define-minor-mode omnibox-mode
@@ -363,6 +374,7 @@
     (omnibox--get selected)))
 
 (global-set-key (kbd "C-o") 'omnibox-M-x)
+;;(setq completing-read-function 'omnibox--completing-read)
 
 (provide 'omnibox)
 ;;; omnibox.el ends here
