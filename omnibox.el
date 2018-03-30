@@ -152,14 +152,14 @@
         (t candidates))
        (-take (- 500 (omnibox--get pre-len)))))
 
-(defun omnibox--generic-completion (candidates input)
-  (if (> (omnibox--get input-len) 0)
-      (let* ((regexp (->> (string-trim input)
-                          (replace-regexp-in-string " \\|$" ".*?")))
-             (completion-regexp-list (and regexp (list regexp)))
-             (case-fold-search completion-ignore-case))
-        (all-completions "" candidates))
-    candidates))
+;;"\\(myword.*oklm.*\\)\\|\\(oklm.*myword\\)" ?
+(defun omnibox--generic-completion (candidates input &optional predicate)
+  (let* ((regexp (->> (string-trim (or input ""))
+                      (replace-regexp-in-string " \\|$" ".*?")))
+         (completion-regexp-list (and regexp (list regexp)))
+         (case-fold-search completion-ignore-case)
+         (all (all-completions "" candidates predicate)))
+    (if (arrayp all) (append all nil) all)))
 
 (defun omnibox--sort-and-highlight (candidates input)
   (-> (--map (omnibox--highlight-common it input) candidates)
@@ -236,7 +236,6 @@
             (documentation it)
             (car (split-string it "\n"))))
 
-;;"\\(myword.*oklm.*\\)\\|\\(oklm.*myword\\)" ?
 (defun omnibox--obarray-candidates (input predicate)
   (let* ((regexp (->> (string-trim input)
                       (replace-regexp-in-string " \\|$" ".*?")))
@@ -254,7 +253,7 @@
   (interactive)
   (omnibox--set title (omnibox--title))
   (omnibox :prompt "M-x: "
-           :candidates (lambda (input) (omnibox--obarray-candidates input 'commandp))
+           :candidates (lambda (input) (omnibox--generic-completion obarray input 'commandp))
            :history extended-command-history
            :detail 'omnibox-M-x--doc))
 
@@ -377,9 +376,7 @@
   (when (minibufferp)
     (exit-minibuffer))
   (omnibox-mode -1)
-  (omnibox--hide)
-  (omnibox--set input nil)
-  (omnibox--set input-len 0))
+  (omnibox--hide))
 
 (defun omnibox--update-input (new-input)
   (omnibox--set input new-input)
