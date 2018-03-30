@@ -145,14 +145,14 @@
   candidate)
 
 (defun omnibox--fetch-candidates (candidates input)
-  (--> (cond ((and (functionp candidates) (omnibox--get extern))
+  (->> (cond ((and (functionp candidates) (omnibox--get extern))
               (funcall candidates input (omnibox--get predicate) t))
              ((and (functionp (omnibox--get predicate)) (omnibox--get extern))
               (omnibox--generic-completion candidates input (omnibox--get predicate)))
              ((functionp candidates)
               (funcall candidates input))
              (t candidates))
-       (-take (- 500 (omnibox--get pre-len)) it)))
+       (-take (- 500 (omnibox--get pre-len)))))
 
 ;;"\\(myword.*oklm.*\\)\\|\\(oklm.*myword\\)" ?
 (defun omnibox--generic-completion (candidates input &optional predicate)
@@ -215,21 +215,24 @@
    (plist-get params :detail)
    (plist-get params :default)
    (plist-get params :history)
-   (plist-get params :title)))
+   (plist-get params :title)
+   (plist-get params :action)))
 
 (defvar omnibox-mode-map)
 
 (defun omnibox--block-and-return nil
-  (unwind-protect
-      (read-from-minibuffer "" nil omnibox-mode-map)
-    (omnibox--abort)
-    (when (eq this-command 'omnibox--abort)
-      (keyboard-quit)))
-  (omnibox--get selected))
+  (unless (omnibox--get action)
+    (unwind-protect
+        (read-from-minibuffer "" nil omnibox-mode-map)
+      (omnibox--abort)
+      (when (eq this-command 'omnibox--abort)
+        (keyboard-quit)))
+    (omnibox--get selected)))
 
 (defun omnibox (&rest plist)
   "Omnibox."
-  (-let* (((prompt candidates detail default history title) (omnibox--resolve-params plist)))
+  (-let* (((prompt candidates detail default history title action)
+           (omnibox--resolve-params plist)))
     (omnibox--set extern omnibox--extern)
     (omnibox--set title (or title (omnibox--title)))
     (omnibox--set prompt prompt)
@@ -239,6 +242,7 @@
     (omnibox--set history history)
     (omnibox--set input-len 0)
     (omnibox--set input nil)
+    (omnibox--set action action)
     (-> (omnibox--make-candidates "")
         (omnibox--render-buffer)
         (omnibox--make-frame))
@@ -267,6 +271,8 @@
   (omnibox :prompt "M-x: "
            :candidates (lambda (input) (omnibox--generic-completion obarray input 'commandp))
            :history extended-command-history
+           :action (lambda (candidate)
+                     (command-execute (intern candidate) t))
            :detail 'omnibox--function-doc))
 
 (defun omnibox-describe-function (prompt collection &optional
@@ -372,7 +378,9 @@
   (interactive)
   (with-current-buffer (omnibox--buffer)
     (omnibox--set selected (omnibox--candidate-at-point)))
-  (omnibox--abort))
+  (omnibox--abort)
+  (-some-> (omnibox--get action)
+           (funcall (omnibox--get selected))))
 
 (defun omnibox--change-line (selection)
   (with-selected-window (get-buffer-window (omnibox--buffer) t)
