@@ -33,6 +33,7 @@
 
 (require 'frame-local)
 (require 'dash)
+(require 'subr-x)
 
 (defvar omnibox-frame-parameters
   `((no-accept-focus . t)
@@ -144,13 +145,14 @@
   candidate)
 
 (defun omnibox--fetch-candidates (candidates input)
-  (->> (cond
-        ((and (functionp candidates) (omnibox--get extern))
-         (funcall candidates input (omnibox--get predicate) t))
-        ((functionp candidates)
-         (funcall candidates input))
-        (t candidates))
-       (-take (- 500 (omnibox--get pre-len)))))
+  (--> (cond ((and (functionp candidates) (omnibox--get extern))
+              (funcall candidates input (omnibox--get predicate) t))
+             ((and (functionp (omnibox--get predicate)) (omnibox--get extern))
+              (omnibox--generic-completion candidates input (omnibox--get predicate)))
+             ((functionp candidates)
+              (funcall candidates input))
+             (t candidates))
+       (-take (- 500 (omnibox--get pre-len)) it)))
 
 ;;"\\(myword.*oklm.*\\)\\|\\(oklm.*myword\\)" ?
 (defun omnibox--generic-completion (candidates input &optional predicate)
@@ -214,6 +216,16 @@
    (plist-get params :default)
    (plist-get params :history)))
 
+(defvar omnibox-mode-map)
+
+(defun omnibox--block-and-return nil
+  (unwind-protect
+      (read-from-minibuffer "" nil omnibox-mode-map)
+    (omnibox--abort)
+    (when (eq this-command 'omnibox--abort)
+      (keyboard-quit)))
+  (omnibox--get selected))
+
 (defun omnibox (&rest plist)
   "Omnibox."
   (-let* (((prompt candidates detail default history) (omnibox--resolve-params plist)))
@@ -228,7 +240,8 @@
     (-> (omnibox--make-candidates "")
         (omnibox--render-buffer)
         (omnibox--make-frame))
-    (omnibox-mode 1)))
+    (omnibox-mode 1)
+    (omnibox--block-and-return)))
 
 (defun omnibox-M-x--doc (candidate)
   (-some--> (intern candidate)
@@ -257,19 +270,26 @@
            :history extended-command-history
            :detail 'omnibox-M-x--doc))
 
-(defun omnibox-describe-function nil
-  (interactive)
+(defun omnibox-describe-function (prompt collection &optional
+                                         predicate require-match
+                                         initial-input hist def
+                                         inherit-input-method)
   (omnibox--set title (omnibox--title))
-  (omnibox :prompt "M-x: "
-           :candidates (lambda (input) (omnibox--obarray-candidates input 'functionp))
-           :history extended-command-history
+  (omnibox :prompt prompt
+           :candidates (lambda (input) (omnibox--generic-completion obarray input 'functionp))
+           :history hist
+           :default def
            :detail 'omnibox-M-x--doc))
 
-(defun omnibox-describe-variable nil
-  (interactive)
+(defun omnibox-describe-variable (prompt collection &optional
+                                         predicate require-match
+                                         initial-input hist def
+                                         inherit-input-method)
   (omnibox--set title (omnibox--title))
-  (omnibox :prompt "Describe variable: "
-           :candidates (lambda (input) (omnibox--obarray-candidates input 'boundp))
+  (omnibox :prompt prompt
+           :candidates (lambda (input) (omnibox--generic-completion obarray input 'boundp))
+           :history hist
+           :default def
            :detail 'omnibox-M-x--doc))
 
 ;; (omnibox :detail "moi" :candidates '("seb" "ok" "coucou") :prompt "seb: ")
@@ -439,22 +459,31 @@
   "Mode for omnibox."
   :init-value nil)
 
+(defvar omnibox--specialized-functions
+  '((describe-function . omnibox-describe-function)
+    (describe-variable . omnibox-describe-variable)))
+
+(defun omnibox--specialized-function-p (command)
+  (assq command omnibox--specialized-functions))
+
+(defun omnibox--run-specialized-function (command &rest params)
+  (-> (alist-get command omnibox--specialized-functions)
+      (apply params)))
+
 (defun omnibox--completing-read (prompt collection &optional
                                         predicate require-match
                                         initial-input hist def
                                         inherit-input-method)
-  (let ((omnibox--extern t))
-    (omnibox--set predicate predicate)
-    (omnibox--set title (format " Omnibox-%s " this-command))
-    (omnibox :prompt prompt
-             :candidates collection
-             :default def)
-    (unwind-protect
-        (read-from-minibuffer "" nil omnibox-mode-map)
-      (omnibox--abort)
-      (when (eq this-command 'omnibox--abort)
-        (keyboard-quit)))
-    (omnibox--get selected)))
+  (if (omnibox--specialized-function-p this-command)
+      (omnibox--run-specialized-function this-command prompt collection predicate
+                                         require-match initial-input
+                                         hist def inherit-input-method)
+    (let ((omnibox--extern t))
+      (omnibox--set predicate predicate)
+      (omnibox--set title (format " Omnibox-%s " this-command))
+      (omnibox :prompt prompt
+               :candidates collection
+               :default def))))
 
 (global-set-key (kbd "C-o") 'omnibox-M-x)
 ;;(setq completing-read-function 'omnibox--completing-read)
