@@ -121,7 +121,7 @@
     (setq mode-line-format nil
           header-line-format nil)
     (erase-buffer)
-    (insert (propertize (omnibox--get prompt) 'face '(:foreground "#1CA0C7"))
+    (insert (propertize (or (omnibox--get prompt) "input: ") 'face '(:foreground "#1CA0C7"))
             (or string "")
             (propertize " " 'face 'cursor))
     (current-buffer)))
@@ -151,13 +151,26 @@
               (omnibox--generic-completion candidates input (omnibox--get predicate)))
              ((functionp candidates)
               (funcall candidates input))
-             (t candidates))
+             (t (omnibox--generic-completion candidates input)))
        (-take (- 500 (omnibox--get pre-len)))))
+
+(defun omnibox--make-regexp (input)
+  (let* ((words (split-string input " " t))
+         (n-words (length words)))
+    (if (<= n-words 1)
+        input
+      (concat
+       "\\("
+       (mapconcat
+        (lambda (list) (mapconcat 'identity list ".*?"))
+        (if (> n-words 3) (list words (reverse words)) (-permutations words))
+        "\\)\\|\\(")
+       "\\)"))))
 
 ;;"\\(myword.*oklm.*\\)\\|\\(oklm.*myword\\)" ?
 (defun omnibox--generic-completion (candidates input &optional predicate)
   (let* ((regexp (->> (string-trim (or input ""))
-                      (replace-regexp-in-string " \\|$" ".*?")))
+                      (omnibox--make-regexp)))
          (completion-regexp-list (and regexp (list regexp)))
          (case-fold-search completion-ignore-case)
          (all (all-completions "" candidates predicate)))
@@ -180,7 +193,7 @@
      (let ((icon (icons-in-terminal 'oct_clock :foreground "grey")))
        (add-text-properties 0 (length hist)
                             (list 'omnibox-history t
-                                  'omnibox-origin hist
+                                  'omnibox-item hist
                                   'omnibox-icon icon)
                             hist)
        (concat hist
@@ -333,14 +346,14 @@
       frame)))
 
 (defun omnibox--candidate-at-point nil
-  (or (get-text-property (point) 'omnibox-origin)
+  (or (get-text-property (point) 'omnibox-item)
       (buffer-substring (line-beginning-position)
                         (line-end-position))))
 
 (defun omnibox--update-overlay nil
   "."
   (let ((icon (get-text-property (point) 'omnibox-icon))
-        (origin (get-text-property (point) 'omnibox-origin))
+        (item (get-text-property (point) 'omnibox-item))
         (documentation (or (get-text-property (point) 'omnibox-doc)
                            (-some--> (omnibox--get detail)
                                      (and (functionp it) it)
@@ -353,7 +366,7 @@
     (move-overlay (omnibox--overlay) (line-beginning-position) (line-end-position))
     (overlay-put (omnibox--overlay)
                  'face '(:background "#1CA0C7" :foreground "black"))
-    (overlay-put (omnibox--overlay) 'display (and icon origin))
+    (overlay-put (omnibox--overlay) 'display (and icon item))
     (overlay-put (omnibox--overlay)
                  'after-string
                  (concat (propertize " " 'display `(space :align-to (- right-fringe ,(string-width documentation) ,(if icon 1 0)) :height 1.1)
