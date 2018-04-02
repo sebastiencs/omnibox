@@ -292,7 +292,7 @@
   (interactive)
   (omnibox :prompt "M-x: "
            :candidates (lambda (input) (omnibox--generic-completion obarray input 'commandp))
-           :history command-history
+           :history extended-command-history
            :action (lambda (candidate)
                      (command-execute (intern candidate) t))
            :detail 'omnibox--function-doc))
