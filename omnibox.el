@@ -146,7 +146,9 @@
 
 (defun omnibox--fetch-candidates (candidates input)
   (->> (cond ((and (functionp candidates) (omnibox--get extern))
-              (funcall candidates input (omnibox--get predicate) t))
+              (omnibox--generic-completion
+               (funcall candidates "" (omnibox--get predicate) t)
+               input))
              ((and (functionp (omnibox--get predicate)) (omnibox--get extern))
               (omnibox--generic-completion candidates input (omnibox--get predicate)))
              ((functionp candidates)
