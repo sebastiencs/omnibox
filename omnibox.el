@@ -417,7 +417,7 @@
 
 (defun omnibox--abort nil
   (interactive)
-  (when (minibufferp)
+  (when (and (minibufferp) (not (omnibox--get action)))
     (exit-minibuffer))
   (omnibox-mode -1)
   (omnibox--hide))
@@ -444,10 +444,10 @@
 
 (defun omnibox--try-complete nil
   (interactive)
-  (-some--> (omnibox--get input)
-            (try-completion it (omnibox--make-candidates it))
-            (substring-no-properties it)
-            (omnibox--update-input it)))
+  (-some->> (omnibox--make-candidates (omnibox--get input))
+            (try-completion)
+            (substring-no-properties)
+            (omnibox--update-input)))
 
 (defun omnibox--make-char-table nil
   "."
@@ -509,8 +509,22 @@
                :default def
                :init initial-input))))
 
+(defun omnibox--on-complete-region (candidate start end &optional buffer)
+  (choose-completion-string candidate
+                            (or buffer (current-buffer))
+                            (list start end)))
+
+(defun omnibox--completion-in-region (start end collection &optional predicate)
+  (let ((omnibox--extern t))
+    (omnibox--set predicate predicate)
+    (omnibox :prompt "Complete: "
+             :candidates collection
+             :init (buffer-substring-no-properties start end)
+             :action (lambda (c) (omnibox--on-complete-region c start end (current-buffer))))))
+
 (global-set-key (kbd "C-o") 'omnibox-M-x)
-;;(setq completing-read-function 'omnibox--completing-read)
+(setq completing-read-function 'omnibox--completing-read)
+(setq completion-in-region-function 'omnibox--completion-in-region)
 
 (provide 'omnibox)
 ;;; omnibox.el ends here
