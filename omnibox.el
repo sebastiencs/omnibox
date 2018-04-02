@@ -140,7 +140,7 @@
     (dolist (word (split-string input " " t))
       (-let* ((match-data (string-match word candidate))
               ((start end) (match-data t)))
-        (when (> end start)
+        (when (and (> end start) (<= end (length candidate)))
           (add-face-text-property start end '(:foreground "#35ACCE") nil candidate)))))
   candidate)
 
@@ -229,7 +229,8 @@
    (plist-get params :default)
    (plist-get params :history)
    (plist-get params :title)
-   (plist-get params :action)))
+   (plist-get params :action)
+   (plist-get params :init)))
 
 (defvar omnibox-mode-map)
 
@@ -244,7 +245,7 @@
 
 (defun omnibox (&rest plist)
   "Omnibox."
-  (-let* (((prompt candidates detail default history title action)
+  (-let* (((prompt candidates detail default history title action init)
            (omnibox--resolve-params plist)))
     (omnibox--set extern omnibox--extern)
     (omnibox--set title (or title (omnibox--title)))
@@ -253,10 +254,10 @@
     (omnibox--set detail detail)
     (omnibox--set default default)
     (omnibox--set history history)
-    (omnibox--set input-len 0)
-    (omnibox--set input nil)
+    (omnibox--set input-len (length init))
+    (omnibox--set input init)
     (omnibox--set action action)
-    (-> (omnibox--make-candidates "")
+    (-> (omnibox--make-candidates (or init ""))
         (omnibox--render-buffer)
         (omnibox--make-frame))
     (omnibox-mode 1)
@@ -318,7 +319,7 @@
 (defun omnibox--make-frame (buffer)
   (-if-let* ((frame (omnibox--get frame)))
       (progn
-        (omnibox--update-input-buffer)
+        (omnibox--update-input-buffer (omnibox--get input))
         (make-frame-visible frame)
         (redisplay))
     (let* ((before-make-frame-hook nil)
@@ -341,7 +342,7 @@
       (omnibox--set frame frame)
       (with-selected-frame frame
         (display-buffer-in-side-window
-         (omnibox--update-input-buffer)
+         (omnibox--update-input-buffer (omnibox--get input))
          '((side . top) (window-height . 1))))
       frame)))
 
@@ -505,7 +506,8 @@
       (omnibox--set predicate predicate)
       (omnibox :prompt prompt
                :candidates collection
-               :default def))))
+               :default def
+               :init initial-input))))
 
 (global-set-key (kbd "C-o") 'omnibox-M-x)
 ;;(setq completing-read-function 'omnibox--completing-read)
