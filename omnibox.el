@@ -85,7 +85,7 @@
 
 (defun omnibox--make-buffer-name (&optional suffix)
   (let ((id (frame-parameter (frame-parent) 'window-id)))
-    (concat "* Omnibox-" suffix id)))
+    (concat " *Omnibox-" suffix id "*")))
 
 (defun omnibox--buffer (&optional suffix)
   (get-buffer-create (omnibox--make-buffer-name suffix)))
@@ -336,15 +336,15 @@
            (x (- (/ (frame-pixel-width) 2)
                  (/ (* 90 (frame-char-width)) 2)
                  internal-border))
-           (frame (with-current-buffer buffer
-                    (make-frame
-                     (append `((left . ,x)
-                               (internal-border-width . ,internal-border)
-                               (default-minibuffer-frame . ,(selected-frame))
-                               (minibuffer . ,(minibuffer-window))
-                               (parent-frame . ,(selected-frame)))
-                             omnibox-frame-parameters))))
+           (frame (make-frame
+                   (append `((left . ,x)
+                             (internal-border-width . ,internal-border)
+                             (default-minibuffer-frame . ,(selected-frame))
+                             (minibuffer . ,(minibuffer-window))
+                             (parent-frame . ,(selected-frame)))
+                           omnibox-frame-parameters)))
            (window (frame-selected-window frame)))
+      (set-window-buffer window buffer)
       (redirect-frame-focus frame (selected-frame))
       (set-window-dedicated-p window t)
       (omnibox--set frame frame)
