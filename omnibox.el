@@ -453,7 +453,7 @@
 (defun omnibox--try-complete nil
   (interactive)
   (-some->> (omnibox--make-candidates (omnibox--get input))
-            (try-completion)
+            (try-completion (omnibox--get input))
             (substring-no-properties)
             (omnibox--update-input)))
 
@@ -533,6 +533,10 @@
 (defun omnibox-setup nil
   (setq completing-read-function 'omnibox--completing-read
         completion-in-region-function 'omnibox--completion-in-region))
+
+;; TODO:
+;; Handle require-match
+
 
 (provide 'omnibox)
 ;;; omnibox.el ends here
