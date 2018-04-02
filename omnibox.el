@@ -1,11 +1,11 @@
 ;;; omnibox.el --- Selection package  -*- lexical-binding: t -*-
 
-;; Copyright (C) 2017 Sebastien Chapuis
+;; Copyright (C) 2018 Sebastien Chapuis
 
 ;; Author: Sebastien Chapuis <sebastien@chapu.is>
 ;; URL: https://github.com/sebastiencs/omnibox
-;; Keywords: completion, selection
-;; Package-Requires: ((emacs "26.1") (dash "2.13"))
+;; Keywords: completion, selection, convenience, frames
+;; Package-Requires: ((emacs "26.1") (dash "2.13") (frame-local "0.0.1"))
 ;; Version: 0.0.1
 
 ;;; License
@@ -28,9 +28,12 @@
 
 ;;; Commentary:
 ;;
+;; A lightweight completion/selection system for Emacs
+;;
 
 ;;; Code:
 
+(require 'icons-in-terminal nil t)
 (require 'frame-local)
 (require 'dash)
 (require 'subr-x)
@@ -80,12 +83,12 @@
   (or omnibox-ov
       (setq omnibox-ov (make-overlay 1 1))))
 
-(defun omnibox--make-buffer-name (&optional frame)
-  (let ((id (frame-parameter frame 'window-id)))
-    (concat "* Omnibox-" id)))
+(defun omnibox--make-buffer-name (&optional suffix)
+  (let ((id (frame-parameter (frame-parent) 'window-id)))
+    (concat "* Omnibox-" suffix id)))
 
-(defun omnibox--buffer (&optional frame)
-  (get-buffer-create (omnibox--make-buffer-name frame)))
+(defun omnibox--buffer (&optional suffix)
+  (get-buffer-create (omnibox--make-buffer-name suffix)))
 
 (defun omnibox--modeline nil
   (let* ((selection (number-to-string (1+ omnibox-selection)))
@@ -117,7 +120,7 @@
       (omnibox--render-buffer)))
 
 (defun omnibox--update-input-buffer (&optional string)
-  (with-current-buffer (get-buffer-create "*SIDE_TEST*")
+  (with-current-buffer (omnibox--buffer "input-")
     (setq mode-line-format nil
           header-line-format nil)
     (erase-buffer)
@@ -192,7 +195,10 @@
 (defun omnibox--format-history (history)
   (mapcar
    (lambda (hist)
-     (let ((icon (icons-in-terminal 'oct_clock :foreground "grey")))
+     (let ((icon (if (fboundp 'icons-in-terminal)
+                     (icons-in-terminal 'oct_clock :foreground "grey")
+                   "H")))
+       (setq hist (copy-sequence hist))
        (add-text-properties 0 (length hist)
                             (list 'omnibox-history t
                                   'omnibox-item hist
@@ -286,25 +292,25 @@
   (interactive)
   (omnibox :prompt "M-x: "
            :candidates (lambda (input) (omnibox--generic-completion obarray input 'commandp))
-           :history extended-command-history
+           :history command-history
            :action (lambda (candidate)
                      (command-execute (intern candidate) t))
            :detail 'omnibox--function-doc))
 
-(defun omnibox-describe-function (prompt collection &optional
-                                         predicate require-match
-                                         initial-input hist def
-                                         inherit-input-method)
+(defun omnibox-describe-function (prompt _collection &optional
+                                         predicate _require-match
+                                         _initial-input hist def
+                                         _inherit-input-method)
   (omnibox :prompt prompt
            :candidates (lambda (input) (omnibox--generic-completion obarray input predicate))
            :history hist
            :default def
            :detail 'omnibox--function-doc))
 
-(defun omnibox-describe-variable (prompt collection &optional
-                                         predicate require-match
-                                         initial-input hist def
-                                         inherit-input-method)
+(defun omnibox-describe-variable (prompt _collection &optional
+                                         _predicate _require-match
+                                         _initial-input hist def
+                                         _inherit-input-method)
   (omnibox :prompt prompt
            :candidates (lambda (input)
                          (omnibox--generic-completion
@@ -350,8 +356,8 @@
 
 (defun omnibox--candidate-at-point nil
   (or (get-text-property (point) 'omnibox-item)
-      (buffer-substring (line-beginning-position)
-                        (line-end-position))))
+      (buffer-substring-no-properties (line-beginning-position)
+                                      (line-end-position))))
 
 (defun omnibox--update-overlay nil
   "."
@@ -524,9 +530,9 @@
              :init (buffer-substring-no-properties start end)
              :action (lambda (c) (omnibox--on-complete-region c start end (current-buffer))))))
 
-(global-set-key (kbd "C-o") 'omnibox-M-x)
-(setq completing-read-function 'omnibox--completing-read)
-(setq completion-in-region-function 'omnibox--completion-in-region)
+(defun omnibox-setup nil
+  (setq completing-read-function 'omnibox--completing-read
+        completion-in-region-function 'omnibox--completion-in-region))
 
 (provide 'omnibox)
 ;;; omnibox.el ends here
