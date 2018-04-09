@@ -157,7 +157,7 @@
              ((functionp candidates)
               (funcall candidates input))
              (t (omnibox--generic-completion candidates input)))
-       (-take (- 500 (omnibox--get pre-len)))))
+       (-take (- 200 (omnibox--get pre-len)))))
 
 (defun omnibox--make-regexp (input)
   (let* ((words (split-string input " " t))
@@ -248,7 +248,8 @@
    (plist-get params :history)
    (plist-get params :title)
    (plist-get params :action)
-   (plist-get params :init)))
+   (plist-get params :init)
+   (plist-get params :require-match)))
 
 (defvar omnibox-mode-map)
 
@@ -263,7 +264,7 @@
 
 (defun omnibox (&rest plist)
   "Omnibox."
-  (-let* (((prompt candidates detail default history title action init)
+  (-let* (((prompt candidates detail default history title action init require-match)
            (omnibox--resolve-params plist)))
     (omnibox--set extern omnibox--extern)
     (omnibox--set title (or title (omnibox--title)))
@@ -275,6 +276,7 @@
     (omnibox--set input-len (length init))
     (omnibox--set input init)
     (omnibox--set action action)
+    (omnibox--set require-match require-match)
     (-> (omnibox--make-candidates (or init ""))
         (omnibox--render-buffer)
         (omnibox--make-frame))
@@ -306,7 +308,8 @@
            :action (lambda (candidate)
                      (setq extended-command-history (cons candidate (delete candidate extended-command-history)))
                      (command-execute (intern candidate) t))
-           :detail 'omnibox--function-doc))
+           :detail 'omnibox--function-doc
+           :require-match t))
 
 (defun omnibox-describe-function (prompt _collection &optional
                                          predicate _require-match
@@ -407,13 +410,28 @@
       (omnibox--disable-overlays)
     (omnibox--update-overlay)))
 
-(defun omnibox--select nil
-  (interactive)
-  (with-current-buffer (omnibox--buffer)
-    (omnibox--set selected (omnibox--candidate-at-point)))
+(defun omnibox--select-return (selected)
+  (omnibox--set selected selected)
   (omnibox--abort)
   (-some-> (omnibox--get action)
-           (funcall (omnibox--get selected))))
+           (funcall selected)))
+
+(defun omnibox--select nil
+  (interactive)
+  (let ((selected (with-current-buffer (omnibox--buffer)
+                    (omnibox--candidate-at-point)))
+        (input (omnibox--get input))
+        (require-match (omnibox--get require-match))
+        empty)
+    (setq empty (equal selected ""))
+    (cond
+     ((and empty (eq require-match t))
+      nil)
+     ((and empty (eq require-match nil))
+      (omnibox--select-return input))
+     ((memq require-match '(confirm confirm-after-completion))
+      (omnibox--select-return (if empty input selected)))
+     (t (omnibox--select-return selected)))))
 
 (defun omnibox--change-line (selection)
   (with-selected-window (get-buffer-window (omnibox--buffer) t)
@@ -526,7 +544,8 @@
       (omnibox :prompt prompt
                :candidates collection
                :default def
-               :init initial-input))))
+               :init initial-input
+               :require-match require-match))))
 
 (defun omnibox--on-complete-region (candidate start end &optional buffer)
   (choose-completion-string candidate
