@@ -131,7 +131,7 @@
 
 (defun omnibox--sort (candidates input)
   (if (> (omnibox--get input-len) 0)
-      (-let* ((groups (--group-by (string-prefix-p input it) candidates)))
+      (-let* ((groups (--group-by (string-prefix-p (string-trim input) it) candidates)))
         (-concat
          (--sort (< (length it) (length other)) (alist-get t groups))
          (--sort (< (length it) (length other)) (alist-get nil groups))))
@@ -163,7 +163,7 @@
   (let* ((words (split-string input " " t))
          (n-words (length words)))
     (if (<= n-words 1)
-        input
+        (string-trim input)
       (concat
        "\\("
        (mapconcat
