@@ -198,16 +198,17 @@
      (let ((icon (if (fboundp 'icons-in-terminal)
                      (icons-in-terminal 'oct_clock :foreground "grey")
                    "H")))
-       (setq hist (copy-sequence hist))
-       (add-text-properties 0 (length hist)
-                            (list 'omnibox-history t
-                                  'omnibox-item hist
-                                  'omnibox-icon icon)
-                            hist)
-       (concat hist
+       (concat (propertize hist
+                           'omnibox-history t
+                           'omnibox-item (substring-no-properties hist)
+                           'omnibox-icon icon)
                (propertize " " 'display '(space :align-to (- right-fringe 2)))
                icon)))
    history))
+
+(defun omnibox--compare-candidates (c1 c2)
+  (string= (or (get-text-property 0 'omnibox-item c1) c1)
+           (or (get-text-property 0 'omnibox-item c2) c2)))
 
 (defun omnibox--get-history (input)
   (-some-> (omnibox--get history)
@@ -220,12 +221,21 @@
       (omnibox--fetch-candidates input)
       (omnibox--sort-and-highlight input)))
 
+(defun omnibox--merge (default history candidates)
+  (let ((-compare-fn 'omnibox--compare-candidates))
+    (when default
+      (setq history (-difference history default))
+      (setq candidates (-difference candidates default)))
+    (when history
+      (setq candidates (-difference candidates history)))
+    (-concat default history candidates)))
+
 (defun omnibox--make-candidates (input)
   (let* ((default (omnibox--get-default))
          (history (omnibox--get-history input))
          (_ (omnibox--set pre-len (+ (length default) (length history))))
          (candidates (omnibox--get-candidates input))
-         (all (-concat default history candidates)))
+         (all (omnibox--merge default history candidates)))
     (omnibox--set candidates-length (length all))
     all))
 
