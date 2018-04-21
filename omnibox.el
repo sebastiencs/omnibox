@@ -263,7 +263,19 @@
     (omnibox--get selected)))
 
 (defun omnibox (&rest plist)
-  "Omnibox."
+  "Open the Omnibox.
+Supported PLIST keys:
+- :prompt
+- :candidates
+- :detail
+- :default
+- :history
+- :title
+- :action
+- :init
+- :require-match
+They will be documented once the package is stable.  Most of them are equal
+to the ones of `completing-read'."
   (-let* (((prompt candidates detail default history title action init require-match)
            (omnibox--resolve-params plist)))
     (omnibox--set extern omnibox--extern)
@@ -301,6 +313,7 @@
        (format " Omnibox-%s " it)))
 
 (defun omnibox-M-x nil
+  "Select and execute a command."
   (interactive)
   (omnibox :prompt "M-x: "
            :candidates (lambda (input) (omnibox--generic-completion obarray input 'commandp))
@@ -417,6 +430,7 @@
            (funcall selected)))
 
 (defun omnibox--select nil
+  "Select to current candidate."
   (interactive)
   (let ((selected (with-current-buffer (omnibox--buffer)
                     (omnibox--candidate-at-point)))
@@ -438,12 +452,14 @@
     (omnibox--update-line selection)))
 
 (defun omnibox--next nil
+  "Move to the next candidate."
   (interactive)
   (setq omnibox-selection (min (1+ omnibox-selection)
                                (1- (omnibox--get candidates-length))))
   (omnibox--change-line omnibox-selection))
 
 (defun omnibox--prev nil
+  "Move to the previous candidate."
   (interactive)
   (setq omnibox-selection (max (1- omnibox-selection) 0))
   (omnibox--change-line omnibox-selection))
@@ -453,6 +469,7 @@
            (make-frame-invisible)))
 
 (defun omnibox--abort nil
+  "Cancel the omnibox."
   (interactive)
   (when (and (minibufferp) (not (omnibox--get action)))
     (exit-minibuffer))
@@ -466,6 +483,7 @@
   (omnibox--update-list-buffer))
 
 (defun omnibox--insert nil
+  "Insert a character."
   (interactive)
   (let* ((char (char-to-string last-command-event))
          (current (or (omnibox--get input) ""))
@@ -473,6 +491,7 @@
     (omnibox--update-input new-string)))
 
 (defun omnibox--backward-delete nil
+  "Delete the previous character."
   (interactive)
   (-when-let* ((current (omnibox--get input))
                (len (length current))
@@ -480,6 +499,7 @@
     (omnibox--update-input new-string)))
 
 (defun omnibox--try-complete nil
+  "Try to complete the candidate."
   (interactive)
   (-some->> (omnibox--make-candidates (omnibox--get input))
             (try-completion (omnibox--get input))
