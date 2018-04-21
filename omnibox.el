@@ -319,8 +319,8 @@ to the ones of `completing-read'."
            :candidates (lambda (input) (omnibox--generic-completion obarray input 'commandp))
            :history extended-command-history
            :action (lambda (candidate)
-                     (setq extended-command-history (cons candidate (delete candidate extended-command-history)))
-                     (command-execute (intern candidate) t))
+                     (command-execute (intern candidate) t)
+                     (setq extended-command-history (cons candidate (delete candidate extended-command-history))))
            :detail 'omnibox--function-doc
            :require-match t))
 
