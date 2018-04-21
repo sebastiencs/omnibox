@@ -102,11 +102,17 @@
        (propertize state 'face '(:background "#1CA0C7" :foreground "black")
                    'display '(raise 0.15))))))
 
+(defun omnibox--render-candidate (candidate)
+  (let ((c (replace-regexp-in-string "[\n\t]+" "" candidate)))
+    (unless (get-text-property 0 'omnibox-item c)
+      (put-text-property 0 (length c) 'omnibox-item candidate c))
+    c))
+
 (defun omnibox--render-buffer (candidates)
   (setq omnibox-selection 0)
   (with-current-buffer (omnibox--buffer)
     (erase-buffer)
-    (insert (mapconcat 'identity candidates "\n"))
+    (insert (mapconcat 'omnibox--render-candidate candidates "\n"))
     (setq mode-line-format '(:eval (omnibox--modeline))
           truncate-lines t
           omnibox-candidates-length (omnibox--get candidates-length)
@@ -141,7 +147,7 @@
   (when (> (omnibox--get input-len) 0)
     (setq candidate (copy-sequence candidate))
     (dolist (word (split-string input " " t))
-      (-let* ((match-data (string-match word candidate))
+      (-let* ((_match-data (string-match word candidate))
               ((start end) (match-data t)))
         (when (and (> end start) (<= end (length candidate)))
           (add-face-text-property start end '(:foreground "#35ACCE") nil candidate)))))
