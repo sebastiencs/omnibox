@@ -38,6 +38,34 @@
 (require 'dash)
 (require 'subr-x)
 
+(defgroup omnibox nil
+  "A lightweigth completion/selection system."
+  :prefix "omnibox-"
+  :group 'convenience)
+
+(defface omnibox-modeline
+  '((((background light)) :foreground "white" :background "black")
+    (((background dark))  :foreground "black" :background "white"))
+  "Face to used on the mode line of omnibox."
+  :group 'omnibox)
+
+(defface omnibox-selection
+  '((((background light)) :foreground "white" :background "black")
+    (((background dark))  :foreground "black" :background "white"))
+  "Face to used on the mode line of omnibox."
+  :group 'omnibox)
+
+(defface omnibox-match
+  '((((background light)) :foreground "#b00000")
+    (((background dark))  :foreground "gold1"))
+  "Face used to highlight matches."
+  :group 'omnibox)
+
+(defface omnibox-prompt
+  '((t :inherit minibuffer-prompt))
+  "Face used on the prompt."
+  :group 'omnibox)
+
 (defvar omnibox-frame-parameters
   `((no-accept-focus . t)
     (no-focus-on-map . t)
@@ -95,11 +123,11 @@
          (length (number-to-string omnibox-candidates-length))
          (state (concat " " selection "/" length " ")))
     (concat
-     (propertize (or (omnibox--get title) " Omnibox ") 'face '(:background "#1CA0C7" :foreground "black")
+     (propertize (or (omnibox--get title) " Omnibox ") 'face 'omnibox-modeline
                  'display '(raise 0.15))
      (propertize " " 'display `(space :align-to (- right-fringe ,(length state)) :height 1.5))
      (when (> omnibox-candidates-length 0)
-       (propertize state 'face '(:background "#1CA0C7" :foreground "black")
+       (propertize state 'face 'omnibox-modeline
                    'display '(raise 0.15))))))
 
 (defun omnibox--render-candidate (candidate)
@@ -127,7 +155,7 @@
     (setq mode-line-format nil
           header-line-format nil)
     (erase-buffer)
-    (insert (propertize (or (omnibox--get prompt) "input: ") 'face '(:foreground "#1CA0C7"))
+    (insert (propertize (or (omnibox--get prompt) "input: ") 'face 'omnibox-prompt)
             (or string "")
             (propertize " " 'face 'cursor))
     (current-buffer)))
@@ -147,7 +175,7 @@
       (-let* ((_match-data (string-match word candidate))
               ((start end) (match-data t)))
         (when (and (> end start) (<= end (length candidate)))
-          (add-face-text-property start end '(:foreground "#35ACCE") nil candidate)))))
+          (add-face-text-property start end 'omnibox-match nil candidate)))))
   candidate)
 
 (defun omnibox--fetch-candidates (candidates input)
@@ -407,18 +435,18 @@ to the ones of `completing-read'."
     (when icon
       (setq documentation (concat documentation " " icon)))
     (setq documentation (concat " " documentation))
-    (add-face-text-property 0 (length documentation) '(:background "#1CA0C7" :foreground "black") nil documentation)
+    (add-face-text-property 0 (length documentation) 'omnibox-selection nil documentation)
     (move-overlay (omnibox--overlay) (line-beginning-position) (line-end-position))
     (overlay-put (omnibox--overlay)
-                 'face '(:background "#1CA0C7" :foreground "black"))
+                 'face 'omnibox-selection)
     (overlay-put (omnibox--overlay) 'display (and icon item))
     (overlay-put (omnibox--overlay)
                  'after-string
                  (concat (propertize " " 'display `(space :align-to (- right-fringe ,(string-width documentation) ,(if icon 1 0)) :height 1.1)
-                                     'face '(:background "#1CA0C7" :foreground "black"))
+                                     'face 'omnibox-selection)
                          documentation
                          (propertize " " 'display `(space :align-to right-fringe)
-                                     'face '(:background "#1CA0C7" :foreground "black"))))))
+                                     'face 'omnibox-selection)))))
 
 (defun omnibox--disable-overlays nil
   (overlay-put (omnibox--overlay) 'after-string nil)
