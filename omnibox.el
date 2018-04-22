@@ -103,10 +103,7 @@
                    'display '(raise 0.15))))))
 
 (defun omnibox--render-candidate (candidate)
-  (let ((c (replace-regexp-in-string "[\n\t]+" "" candidate)))
-    (unless (get-text-property 0 'omnibox-item c)
-      (put-text-property 0 (length c) 'omnibox-item candidate c))
-    c))
+  (replace-regexp-in-string "[\n\t]+" " " candidate))
 
 (defun omnibox--render-buffer (candidates)
   (setq omnibox-selection 0)
@@ -191,6 +188,11 @@
   (-> (--map (omnibox--highlight-common it input) candidates)
       (omnibox--sort input)))
 
+(defun omnibox--make-id (candidate)
+  (setq candidate (copy-sequence candidate))
+  (put-text-property 0 (length candidate) 'omnibox-candidate candidate candidate)
+  candidate)
+
 (defun omnibox--get-default nil
   (when (= (omnibox--get input-len) 0)
     (let ((default (omnibox--get default)))
@@ -206,15 +208,15 @@
                    "H")))
        (concat (propertize hist
                            'omnibox-history t
-                           'omnibox-item (substring-no-properties hist)
+                           'omnibox-candidate hist
                            'omnibox-icon icon)
                (propertize " " 'display '(space :align-to (- right-fringe 2)))
                icon)))
    history))
 
 (defun omnibox--compare-candidates (c1 c2)
-  (string= (or (get-text-property 0 'omnibox-item c1) c1)
-           (or (get-text-property 0 'omnibox-item c2) c2)))
+  (string= (or (get-text-property 0 'omnibox-candidate c1) c1)
+           (or (get-text-property 0 'omnibox-candidate c2) c2)))
 
 (defun omnibox--get-history (input)
   (-some-> (omnibox--get history)
@@ -223,9 +225,10 @@
            (omnibox--sort-and-highlight input)))
 
 (defun omnibox--get-candidates (input)
-  (-> (omnibox--get candidates)
-      (omnibox--fetch-candidates input)
-      (omnibox--sort-and-highlight input)))
+  (--> (omnibox--get candidates)
+       (omnibox--fetch-candidates it input)
+       (mapcar 'omnibox--make-id it)
+       (omnibox--sort-and-highlight it input)))
 
 (defun omnibox--merge (default history candidates)
   (let ((-compare-fn 'omnibox--compare-candidates))
@@ -388,14 +391,14 @@ to the ones of `completing-read'."
       frame)))
 
 (defun omnibox--candidate-at-point nil
-  (or (get-text-property (point) 'omnibox-item)
+  (or (get-text-property (point) 'omnibox-candidate)
       (buffer-substring-no-properties (line-beginning-position)
                                       (line-end-position))))
 
 (defun omnibox--update-overlay nil
   "."
   (let ((icon (get-text-property (point) 'omnibox-icon))
-        (item (get-text-property (point) 'omnibox-item))
+        (item (get-text-property (point) 'omnibox-candidate))
         (documentation (or (get-text-property (point) 'omnibox-doc)
                            (-some--> (omnibox--get detail)
                                      (and (functionp it) it)
