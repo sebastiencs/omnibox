@@ -217,9 +217,9 @@
       (omnibox--sort input)))
 
 (defun omnibox--make-id (candidate)
-  (setq candidate (copy-sequence candidate))
-  (put-text-property 0 (length candidate) 'omnibox-candidate candidate candidate)
-  candidate)
+  (let ((copy (copy-sequence candidate)))
+    (put-text-property 0 (length candidate) 'omnibox-candidate candidate copy)
+    copy))
 
 (defun omnibox--get-default nil
   (when (= (omnibox--get input-len) 0)
